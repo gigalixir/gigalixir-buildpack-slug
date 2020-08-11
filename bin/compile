@@ -65,7 +65,7 @@ export_env_vars
 mkdir -p $cache_dir/out
 rm -f $cache_dir/out/*
 TARBALL="$cache_dir/out/app.tar.gz"
-curl -O $TARBALL $slug_url
+curl -o $TARBALL $slug_url
 
 # so it can be deleted outside of container
 chmod +w $TARBALL
