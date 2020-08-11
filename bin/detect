@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+config_file="$1/slug_buildpack.config"
+
+if [ -f $config_file ];
+then
+  echo "Slug"
+  exit 0
+else
+  exit 1
+fi

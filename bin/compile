@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir> <env-dir>
+
+### Configure environment
+
+set -o errexit    # always exit on error
+set -o pipefail   # dont ignore exit codes when piping output
+unset GIT_DIR     # Avoid GIT_DIR leak from previous build steps
+
+### Configure directories
+
+mkdir -p $1 $2 $3 # Ensure dirs are present
+
+build_dir=$(cd $1 && pwd)
+cache_dir=$(cd $2 && pwd)
+env_path=$(cd $3 && pwd)
+app_relative_path="." # default
+
+# "return" value is basically just $app_relative_path. not returned, just set as env var.
+function load_config() {
+  output_section "Loading config..."
+
+  local custom_config_file="${build_dir}/slug_buildpack.config"
+
+  if [ -f $custom_config_file ];
+  then
+    source $custom_config_file
+  else
+    echo "slug_buildpack.config is required"
+    exit 1;
+  fi
+
+  output_line "* found slug url: $slug_url"
+}
+
+# copied from HashNuke/HashNuke/heroku-buildpack-elixir
+function export_env_vars() {
+  whitelist_regex=${2:-''}
+  blacklist_regex=${3:-'^(PATH|GIT_DIR|CPATH|CPPATH|LD_PRELOAD|LIBRARY_PATH)$'}
+  if [ -d "$env_path" ]; then
+    output_section "Will export the following config vars:"
+    for e in $(ls $env_path); do
+      echo "$e" | grep -E "$whitelist_regex" | grep -vE "$blacklist_regex" &&
+      export "$e=$(cat $env_path/$e)"
+      :
+    done
+  fi
+}
+
+function output_line() {
+  local spacing="      "
+  echo "${spacing} $1"
+}
+
+function output_section() {
+  local indentation="----->"
+  echo "${indentation} $1"
+}
+# end copy
+
+load_config
+export_env_vars
+
+# download slug
+mkdir -p $cache_dir/out
+rm -f $cache_dir/out/*
+TARBALL="$cache_dir/out/app.tar.gz"
+curl -O $TARBALL $slug_url
+
+# so it can be deleted outside of container
+chmod +w $TARBALL
+
+# TODO: we'll have to make this configurable. this will cause non-distillery elixir releases to be unable to remote console
+output_section "Determining release capabilities"
+capabilities_file="$cache_dir/out/capabilities"
+
+# for elixir releases
+# echo '{"distillery": {"eval": "elixir", "rpc": "no_print", "start_command": "start", "remote_command": "remote"}}' > $capabilities_file
+# for distillery
+echo '{"distillery": {"eval": "elixir"}}' > $capabilities_file
+
+# so it can be deleted outside of container
+chmod +w $cache_dir/out/capabilities
